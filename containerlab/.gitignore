@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Docker image tarballs exceed GitHub's 100MB file limit
+lab/dist/*.tar.gz
+
+# The key vault: built from the tracked private keys by tools/build_vault.sh
+# (labkit.deploy() and the Codespace bootstrap run it). Not committed because
+# a deploy rewrites its certificates and chowns the private keys to root.
+lab/phase4/keys/
+lab/phase4/keys.bak.*/
+lab/phase4/clab-bgpsec-p4/
+bgpsec-testbed/key_setup/testbed_keys/

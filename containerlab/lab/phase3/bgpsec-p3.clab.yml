@@ -1,0 +1,195 @@
+# Phase 3 — four ASes on point-to-point links.
+#
+# RPKI plane is unchanged from phase1 (same mgmt addressing, same staging).
+# Data plane moves off the shared bridge onto dedicated veth pairs so each
+# inter-AS link is independently capturable — the point of the whole port.
+#
+# Link addressing: per-link /24, host octet = the AS's last digit.
+#   as64602:eth1 10.23.0.2 ── 10.23.0.3 eth1:as64603
+#   as64603:eth2 10.34.0.3 ── 10.34.0.4 eth1:as64604
+#   as64604:eth2 10.45.0.4 ── 10.45.0.5 eth1:as64605
+# The mgmt network (10.0.0.0/24) carries only SRx proxy traffic, RTR, and
+# host access — no BGP peerings.
+#
+# Capture points (all sudo-free via docker exec):
+#   link 02-03: docker exec clab-bgpsec-p3-as64602 tcpdump -i eth1 ...
+#   link 03-04: docker exec clab-bgpsec-p3-as64603 tcpdump -i eth2 ...
+#   link 04-05: docker exec clab-bgpsec-p3-as64604 tcpdump -i eth2 ...
+#               (or as64605 eth1 for the observer's own view)
+
+name: bgpsec-p3
+
+mgmt:
+  network: bgpsec_mgmt
+  bridge: br-bgp
+  ipv4-subnet: 10.0.0.0/24
+
+topology:
+  defaults:
+    kind: linux
+
+  nodes:
+    # --- RPKI plane -------------------------------------------------------
+    rsyncd:
+      image: vimagick/rsyncd
+      mgmt-ipv4: 10.0.0.12
+      binds:
+        - ../../bgpsec-testbed/topologies/configs/rsyncd.conf:/etc/rsyncd.conf
+        - ./state/rsync_repo:/share/repo:ro
+        - ./state/rsync_ta:/share/ta:ro
+
+    # Pinned to v0.14.5: sign_csr.sh uses the pre-0.15 krillc CLI (-t/-c/-s
+    # flags), which `latest` (0.15+) removed. Same reason for krillc below.
+    krill:
+      image: nlnetlabs/krill:v0.14.5
+      mgmt-ipv4: 10.0.0.10
+      binds:
+        - ./state/rsync_repo:/var/krill/data/repo/rsync/
+        - ../../bgpsec-testbed/topologies/configs/krill.conf:/var/krill/data/krill.conf
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+      healthcheck:
+        test: ["CMD", "wget", "http://10.0.0.10:3000/health", "-O", "/dev/null"]
+        start-period: 5
+        interval: 5
+        retries: 10
+      stages:
+        create:
+          wait-for:
+            - node: rsyncd
+              stage: create
+
+    # One-shot: submits each router CSR to Krill, then exits. Replaces the
+    # self-signed certs in testbed_keys with Krill-issued ones.
+    krillc:
+      image: nlnetlabs/krill:v0.14.5
+      mgmt-ipv4: 10.0.0.9
+      cmd: /bin/bash -c /opt/sign_csr.sh
+      # One-shots must stay exited or wait-for {stage: exit} never fires;
+      # the default policy restarts them even on success.
+      restart-policy: "no"
+      binds:
+        - ../../bgpsec-testbed/topologies/scripts/sign_csr.sh:/opt/sign_csr.sh
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ./state/rsync_repo:/var/krill/data/repo/rsync/
+      stages:
+        create:
+          wait-for:
+            - node: krill
+              stage: healthy
+
+    # One-shot: pulls Krill's trust anchor so Routinator can use it.
+    tal_share:
+      image: bgpsec/tal-share:local
+      mgmt-ipv4: 10.0.0.11
+      restart-policy: "no"
+      binds:
+        - ./state/rsync_ta:/share/ta
+      stages:
+        create:
+          wait-for:
+            - node: krillc
+              stage: exit
+
+    routinator:
+      image: nlnetlabs/routinator:v0.15.2
+      mgmt-ipv4: 10.0.0.14
+      cmd: --config /etc/routinator.conf server --rtr 10.0.0.14:3323 --http 10.0.0.14:8323 --http 10.0.0.14:9556
+      binds:
+        # Lab-owned: upstream conf + refresh=30 (default 600s hides CA-side
+        # changes for 10 min — too slow to observe or teach with).
+        - ../configs/routinator.conf:/etc/routinator.conf
+        - ./state/rsync_ta:/home/routinator/krill-tal
+      healthcheck:
+        test: ["CMD", "wget", "http://10.0.0.14:8323/status", "-O", "/dev/null"]
+        start-period: 10
+        interval: 5
+        retries: 20
+      stages:
+        create:
+          wait-for:
+            - node: krillc
+              stage: exit
+            - node: tal_share
+              stage: exit
+
+    # Validation engine. Shared; the three QuaggaSRx routers proxy to it.
+    # (GoBGP-SRx does not — it validates locally via srx-crypto-api.)
+    srx_server:
+      image: bgpsec/srx-server:local
+      mgmt-ipv4: 10.0.0.15
+      binds:
+        - ../../bgpsec-testbed/topologies/configs/srx_server.conf:/etc/srx_server.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi_server.conf:/usr/local/etc/srxcryptoapi.conf
+      stages:
+        create:
+          wait-for:
+            - node: routinator
+              stage: healthy
+
+    # --- Routers ----------------------------------------------------------
+    as64602:
+      image: bgpsec/quaggasrx:local
+      mgmt-ipv4: 10.0.0.2
+      binds:
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ./configs/quagga_as64602.conf:/etc/quagga.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+      exec:
+        - ip addr add 10.23.0.2/24 dev eth1
+      stages:
+        create:
+          wait-for:
+            - node: srx_server
+              stage: create
+
+    as64603:
+      image: bgpsec/quaggasrx:local
+      mgmt-ipv4: 10.0.0.3
+      binds:
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ./configs/quagga_as64603.conf:/etc/quagga.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+      exec:
+        - ip addr add 10.23.0.3/24 dev eth1
+        - ip addr add 10.34.0.3/24 dev eth2
+      stages:
+        create:
+          wait-for:
+            - node: srx_server
+              stage: create
+
+    as64604:
+      image: bgpsec/quaggasrx:local
+      mgmt-ipv4: 10.0.0.4
+      binds:
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ./configs/quagga_as64604.conf:/etc/quagga.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+      exec:
+        - ip addr add 10.34.0.4/24 dev eth1
+        - ip addr add 10.45.0.4/24 dev eth2
+      stages:
+        create:
+          wait-for:
+            - node: srx_server
+              stage: create
+
+    as64605:
+      image: bgpsec/gobgpsrx:local
+      mgmt-ipv4: 10.0.0.5
+      binds:
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ./configs/gobgpd-as64605.conf:/etc/gobgpd.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+      exec:
+        - ip addr add 10.45.0.5/24 dev eth1
+      stages:
+        create:
+          wait-for:
+            - node: srx_server
+              stage: create
+
+  links:
+    - endpoints: ["as64602:eth1", "as64603:eth1"]
+    - endpoints: ["as64603:eth2", "as64604:eth1"]
+    - endpoints: ["as64604:eth2", "as64605:eth1"]

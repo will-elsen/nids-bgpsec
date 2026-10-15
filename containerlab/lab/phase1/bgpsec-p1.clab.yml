@@ -1,0 +1,149 @@
+# Phase 1 — two-router smoke test.
+#
+# A direct port of bgpsec-testbed/topologies/two_routers/quaggasrx from
+# docker-compose. Deliberately minimal deviation from the known-working
+# upstream: same addressing, same configs, same startup ordering. The point is
+# to prove the images sign and validate, not to redesign the topology.
+#
+# Addressing stays on a single flat 10.0.0.0/24 here because every upstream
+# config hardcodes these IPs. Point-to-point links come in Phase 3, where they
+# actually buy something.
+#
+# Compose named volumes (rsync_repo, rsync_ta) become host binds under ./state/.
+
+name: bgpsec-p1
+
+mgmt:
+  network: bgpsec_mgmt
+  bridge: br-bgp
+  ipv4-subnet: 10.0.0.0/24
+
+topology:
+  defaults:
+    kind: linux
+
+  nodes:
+    # --- RPKI plane -------------------------------------------------------
+    rsyncd:
+      image: vimagick/rsyncd
+      mgmt-ipv4: 10.0.0.12
+      binds:
+        - ../../bgpsec-testbed/topologies/configs/rsyncd.conf:/etc/rsyncd.conf
+        - ./state/rsync_repo:/share/repo:ro
+        - ./state/rsync_ta:/share/ta:ro
+
+    # Pinned to v0.14.5: sign_csr.sh uses the pre-0.15 krillc CLI (-t/-c/-s
+    # flags), which `latest` (0.15+) removed. Same reason for krillc below.
+    krill:
+      image: nlnetlabs/krill:v0.14.5
+      mgmt-ipv4: 10.0.0.10
+      binds:
+        - ./state/rsync_repo:/var/krill/data/repo/rsync/
+        - ../../bgpsec-testbed/topologies/configs/krill.conf:/var/krill/data/krill.conf
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+      healthcheck:
+        test: ["CMD", "wget", "http://10.0.0.10:3000/health", "-O", "/dev/null"]
+        start-period: 5
+        interval: 5
+        retries: 10
+      stages:
+        create:
+          wait-for:
+            - node: rsyncd
+              stage: create
+
+    # One-shot: submits each router CSR to Krill, then exits. Replaces the
+    # self-signed certs in testbed_keys with Krill-issued ones.
+    krillc:
+      image: nlnetlabs/krill:v0.14.5
+      mgmt-ipv4: 10.0.0.9
+      cmd: /bin/bash -c /opt/sign_csr.sh
+      # One-shots must stay exited or wait-for {stage: exit} never fires;
+      # the default policy restarts them even on success.
+      restart-policy: "no"
+      binds:
+        - ../../bgpsec-testbed/topologies/scripts/sign_csr.sh:/opt/sign_csr.sh
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ./state/rsync_repo:/var/krill/data/repo/rsync/
+      stages:
+        create:
+          wait-for:
+            - node: krill
+              stage: healthy
+
+    # One-shot: pulls Krill's trust anchor so Routinator can use it.
+    tal_share:
+      image: bgpsec/tal-share:local
+      mgmt-ipv4: 10.0.0.11
+      restart-policy: "no"
+      binds:
+        - ./state/rsync_ta:/share/ta
+      stages:
+        create:
+          wait-for:
+            - node: krillc
+              stage: exit
+
+    routinator:
+      image: nlnetlabs/routinator:v0.15.2
+      mgmt-ipv4: 10.0.0.14
+      cmd: --config /etc/routinator.conf server --rtr 10.0.0.14:3323 --http 10.0.0.14:8323 --http 10.0.0.14:9556
+      binds:
+        # Lab-owned: upstream conf + refresh=30 (default 600s hides CA-side
+        # changes for 10 min — too slow to observe or teach with).
+        - ../configs/routinator.conf:/etc/routinator.conf
+        - ./state/rsync_ta:/home/routinator/krill-tal
+      healthcheck:
+        test: ["CMD", "wget", "http://10.0.0.14:8323/status", "-O", "/dev/null"]
+        start-period: 10
+        interval: 5
+        retries: 20
+      stages:
+        create:
+          wait-for:
+            - node: krillc
+              stage: exit
+            - node: tal_share
+              stage: exit
+
+    # Validation engine. One shared instance; both routers proxy to it.
+    srx_server:
+      image: bgpsec/srx-server:local
+      mgmt-ipv4: 10.0.0.15
+      binds:
+        - ../../bgpsec-testbed/topologies/configs/srx_server.conf:/etc/srx_server.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi_server.conf:/usr/local/etc/srxcryptoapi.conf
+      stages:
+        create:
+          wait-for:
+            - node: routinator
+              stage: healthy
+
+    # --- Routers ----------------------------------------------------------
+    as64602:
+      image: bgpsec/quaggasrx:local
+      mgmt-ipv4: 10.0.0.2
+      binds:
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ../../bgpsec-testbed/topologies/configs/quaggasrx/quagga_as64602.conf:/etc/quagga.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+        - ./state/rsync_ta:/etc/routinator/krill-tal
+      stages:
+        create:
+          wait-for:
+            - node: srx_server
+              stage: create
+
+    as64603:
+      image: bgpsec/quaggasrx:local
+      mgmt-ipv4: 10.0.0.3
+      binds:
+        - ../../bgpsec-testbed/key_setup/testbed_keys:/var/lib/bgpsec-keys
+        - ../../bgpsec-testbed/topologies/configs/quaggasrx/quagga_as64603.conf:/etc/quagga.conf
+        - ../../bgpsec-testbed/topologies/configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+        - ./state/rsync_ta:/etc/routinator/krill-tal
+      stages:
+        create:
+          wait-for:
+            - node: srx_server
+              stage: create

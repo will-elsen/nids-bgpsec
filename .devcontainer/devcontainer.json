@@ -1,0 +1,21 @@
+{
+    "name": "BGPsec module lab",
+    "image": "ghcr.io/srl-labs/containerlab/devcontainer-dind-slim:0.77.0",
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    "hostRequirements": {
+        "cpus": 4,
+        "memory": "8gb",
+        "storage": "32gb"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-toolsai.jupyter"
+            ]
+        }
+    },
+    "postCreateCommand": "bash .devcontainer/postCreate.sh"
+}

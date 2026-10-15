@@ -1,0 +1,5 @@
+# Shell entry points run in Linux containers and Codespaces
+*.sh   text eol=lf
+# DER key material must never be line-ending normalized
+*.key  binary
+*.der  binary

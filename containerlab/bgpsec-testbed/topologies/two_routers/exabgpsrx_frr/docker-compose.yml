@@ -1,0 +1,140 @@
+# inspired by nlnetlabs/rpki-deploy krill-e2e-test (https://github.com/NLnetLabs/rpki-deploy/)
+
+services: 
+  # starting up main krill container
+  krill:
+    container_name: krill
+    image: nlnetlabs/krill
+    volumes:
+      - rsync_repo:/var/krill/data/repo/rsync/
+      - ../../configs/krill.conf:/var/krill/data/krill.conf
+      - ../../../key_setup/testbed_keys:/var/lib/bgpsec-keys
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.10
+    healthcheck: 
+      test: ["CMD", "wget", "http://10.0.0.10:3000/health", "-O", "/dev/null"]
+      interval: 10s
+      retries: 5
+    depends_on:
+      - rsyncd
+
+  # using second krill container to add certificates to Krill
+  krillc:
+    container_name: krillc
+    image: nlnetlabs/krill
+    volumes:
+      - ../../scripts/sign_csr.sh:/opt/sign_csr.sh
+      - ../../../key_setup/testbed_keys:/var/lib/bgpsec-keys
+      - rsync_repo:/var/krill/data/repo/rsync/
+    command: >
+      /bin/bash -c "/opt/sign_csr.sh"
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.9
+    depends_on: 
+      krill:
+        condition: service_healthy    
+
+  # sharing tal file between krill and routinator
+  tal_share:
+    container_name: tal_share
+    build:
+      context: ../../../docker_images/tal_share
+      network: host
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.11
+    volumes:
+      - rsync_ta:/share/ta
+    depends_on:
+      krillc:
+        condition: service_completed_successfully
+
+  # rsync container to allow routinator to pull relevant files from krill repository
+  rsyncd:
+    container_name: rsyncd
+    image: vimagick/rsyncd 
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.12
+    volumes:
+      - ../../configs/rsyncd.conf:/etc/rsyncd.conf
+      - rsync_repo:/share/repo:ro
+      - rsync_ta:/share/ta:ro
+
+  # start up routinator with configuration that points to folder with krill tal
+  routinator:
+    container_name: routinator
+    image: nlnetlabs/routinator
+    command: "--config /etc/routinator.conf server --rtr 10.0.0.14:3323 --http 10.0.0.14:8323 --http 10.0.0.14:9556"
+    volumes:
+    - ../../configs/routinator.conf:/etc/routinator.conf
+    - rsync_ta:/home/routinator/krill-tal
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.14
+    healthcheck:
+      test: ["CMD", "wget", "http://10.0.0.14:8323/status", "-O", "/dev/null"]
+      interval: 10s
+      retries: 5
+    depends_on: 
+      krillc:
+        condition: service_completed_successfully    
+      tal_share:
+        condition: service_completed_successfully    
+  
+  exabgpsrx_one:
+    container_name: exabgpsrx_one
+    image: exabgpsrx
+    build:
+      context: ../../../docker_images/exabgpsrx
+      network: host
+    volumes: 
+      # mounting to temp folder to later allow copying and modifying permissions of private keys in container without modifying keys on host
+      - ../../../key_setup/testbed_keys:/var/lib/bgpsec-keys-temp
+      - ../../configs/exabgpsrx/exabgp-as64602.conf:/etc/exabgp.conf
+      - ../../configs/srxcryptoapi.conf:/usr/local/etc/srxcryptoapi.conf
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.2
+    depends_on:
+      routinator:
+        condition: service_healthy
+  
+  frr_two:
+    container_name: frr_two
+    image: frr
+    cap_add:
+      - SYS_ADMIN
+      - NET_RAW
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+    build:
+      context: ../../../docker_images/frr
+      network: host
+    volumes:
+      - ../../configs/frr/bgpd_as64603.conf:/usr/local/etc/bgpd.conf
+      - ../../../key_setup/testbed_keys:/var/lib/bgpsec-keys
+    networks:
+      bgp:
+        ipv4_address: 10.0.0.3
+    depends_on:
+      routinator:
+        condition: service_healthy
+
+
+volumes:
+  rsync_repo:
+
+  rsync_ta:
+
+
+networks:
+  bgp:
+    driver_opts:
+      com.docker.network.bridge.name: br-bgp 
+    ipam:
+      driver: default
+      config: 
+        - subnet: 10.0.0.0/8

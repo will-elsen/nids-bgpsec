@@ -1,0 +1,83 @@
+diff --git a/proto/bgp/attrs.c b/proto/bgp/attrs.c
+index 3665b084..fa15ea33 100644
+--- a/proto/bgp/attrs.c
++++ b/proto/bgp/attrs.c
+@@ -783,11 +783,14 @@ static struct attr_desc bgp_attr_table[] = {
+   { .name = NULL },                                                             /* 27 BA_PE_DIST_LABELS */
+   { .name = NULL },                                                             /* 28 BA_ENTROPY_LABELS */
+   { .name = NULL },                                                             /* 29 BA_LS_ATTRIBUTE */
++  { .name = NULL },                                                             /* 30 Deprecated */
++  { .name = NULL },                                                             /* 31 Deprecated */
++  { .name = NULL },                                                             /* 32 LARGE_COMMUNITY */
+   /* supported */
+ #ifdef CONFIG_BGPSEC
+   /* Treated as a special case and checked by decode_bgpsec_attr,
+      bgpsec_authenticate, and encode_bgpsec_attr */
+-  { "bgpsec_signature", -1, BAF_OPTIONAL, EAF_TYPE_OPAQUE, 1,                   /* 30 BA_BGPSEC_SIGNATURE */
++  { "bgpsec_signature", -1, BAF_OPTIONAL, EAF_TYPE_OPAQUE, 1,                   /* 33 BA_BGPSEC_SIGNATURE */
+     NULL, NULL },
+ #endif  
+ };
+diff --git a/proto/bgp/bgp.h b/proto/bgp/bgp.h
+index 4a40817d..6832078a 100644
+--- a/proto/bgp/bgp.h
++++ b/proto/bgp/bgp.h
+@@ -31,7 +31,7 @@ struct eattr;
+ #define BGPSEC_VERSION	            0
+ /* currently capability is arbitrary number from private use XXX needs
+    to change to private use 128-255 until have a real number */
+-#define BGPSEC_CAPABILITY           72
++#define BGPSEC_CAPABILITY           7
+ #define BGPSEC_SKI_LENGTH           20
+ #define BGPSEC_ALGO_ID              1   /* XXX this needs to be changed */
+ #define BGPSEC_MAX_SIG_LENGTH       80  
+@@ -392,7 +392,7 @@ void bgp_log_error(struct bgp_proto *p, u8 class, char *msg, unsigned code, unsi
+ #define BA_LS_ATTRIBUTE         0x1d   /* BGP-LS Attribute (TEMPORARY, expired 2014-03-11) [draft-ietf-idr-ls-distribution] */
+ 
+ /* Supported */
+-#define BA_BGPSEC_SIGNATURE     0x1E   /* XXX 30 is best guess, draft-ietf-sidr-bgpsec-protocol */
++#define BA_BGPSEC_SIGNATURE     0x21   /* 33 as standardised in [RFC8205] */
+ /* internal use only */
+ #define BA_INTERNAL_BGPSEC_VALID    0xdd 
+ #define BA_INTERNAL_BGPSEC_INVALID  0xdf
+diff --git a/proto/bgp/bgpsec/validate.c b/proto/bgp/bgpsec/validate.c
+index c7b902c9..6373b257 100644
+--- a/proto/bgp/bgpsec/validate.c
++++ b/proto/bgp/bgpsec/validate.c
+@@ -50,15 +50,14 @@ bgpsec_load_key_internal(const struct bgp_config *conf,
+     if ((bio = BIO_new_file(filename, "rb")) != NULL &&
+ 	d2i_bio_method(bio, &key_data->pkey) != NULL &&
+ 	EVP_PKEY_id(key_data->pkey) == EVP_PKEY_EC &&
+-	BIO_free(bio))
++    BIO_free(bio))
+     {
+-	EC_KEY_set_asn1_flag(EVP_PKEY_get0(key_data->pkey), OPENSSL_EC_NAMED_CURVE);
+         ret = BGPSEC_SUCCESS;
+-	bio = NULL;
++        bio = NULL;
+     }
+ 
+     BIO_free(bio);
+-
++    
+     return ret;
+ }
+ 
+@@ -86,7 +85,7 @@ int bgpsec_sign_data_with_key(const struct bgp_config *conf,
+ 
+     EVP_PKEY_CTX *ctx = NULL;
+     unsigned char md_value[EVP_MAX_MD_SIZE];
+-    size_t md_len;
++    size_t md_len = 0;
+     size_t sig_len = signature_len;
+     int result = -1;
+ 
+@@ -158,7 +157,7 @@ int bgpsec_verify_signature_with_key(const struct bgp_config *conf,
+ 				     const byte *signature, const size_t signature_len) {
+     EVP_PKEY_CTX *ctx = NULL;
+     unsigned char md_value[EVP_MAX_MD_SIZE];
+-    size_t md_len;
++    size_t md_len = 0;
+     int result = BGPSEC_SIGNATURE_ERROR;
+ 
+     switch (signature_algorithm) {
