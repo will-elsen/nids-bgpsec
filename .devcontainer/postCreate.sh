@@ -82,6 +82,8 @@ else
     else
         rm -f "$DIST/$ASSET"
         echo "no usable image bundle — building from source; this takes ~20 minutes"
+        echo "(if $REPO has no '$TAG' release yet, publish one once with"
+        echo " bash containerlab/lab/tools/publish_images.sh — see containerlab/CODESPACES.md)"
         (cd containerlab/lab && bash build-images.sh)
     fi
 fi

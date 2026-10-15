@@ -6,9 +6,11 @@ nothing set up. All you need is a browser and access to Github.
 This file will not be shown to students
 ## What you need before starting
 
-- A GitHub account that can see `will-elsen/bgpsec_module`. The repo is
-  **private**, so "can see" means owner or invited collaborator — check that
+- A GitHub account that can see `will-elsen/bgpsec_module`. If the repo is
+  **private**, "can see" means owner or invited collaborator — check that
   the repo page loads in your browser while signed in.
+- The repo's `lab-images` release (see the next section). Without it the
+  Codespace still works, but builds the router images from source.
 - Codespaces quota. The free personal tier includes 120 core-hours and
   15 GB-months of storage per month; this lab's 4-core machine therefore
   gives roughly 30 hours of runtime. No payment method is needed within
@@ -16,6 +18,24 @@ This file will not be shown to students
 
 Nothing is installed locally. Docker, containerlab, Python, and the lab's
 router images all live inside the Codespace.
+
+## One time, after the first push: publish the image release
+
+The `postCreate` script downloads the router images from the `lab-images`
+release of **the repo the Codespace runs from**. A newly created GitHub repo
+has no releases, so publish one once, from a clone on a machine with `gh`
+signed in:
+
+```bash
+bash containerlab/lab/tools/publish_images.sh            # or: ... owner/repo
+```
+
+It uploads `containerlab/lab/dist/bgpsec-lab-images.tar.gz` (gitignored, so
+fetch it first from an existing release with `gh release download lab-images
+--repo <old-repo> --dir containerlab/lab/dist`), or saves a fresh bundle
+from the local `bgpsec/*:local` images when that file is absent. It checks
+that all four images are in the bundle before uploading, and re-running it
+replaces the asset. Re-publish whenever the images are rebuilt.
 
 ## Creating the Codespace
 

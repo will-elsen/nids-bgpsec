@@ -436,6 +436,7 @@ code(r"""
 lab.set_part("d")
 lab.attack("stop")
 lab.wait_for_best(lab.VICTIM, as_path=REAL)
+lab.wait_for_route(lab.OBSERVER)       # the far end hears the route a moment later
 """)
 
 code(r"""

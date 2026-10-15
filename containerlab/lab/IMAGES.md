@@ -57,13 +57,18 @@ Regenerated 2026-07-31 to include the daemon supervisor; an older bundle will
 deploy and then fail at the first part switch.
 
 ```
-sha256  a4aca79dd28be59e805d2b1232892be62516bfad08ad9b7ddd44533bbeb23fb3
+sha256  a4aca79dd28be59e805d2b1232892be62516bfad08ad9b7ddd44533bbeb23fb3   (2026-07-31 build)
+sha256  7fe312e2cdde52f7d11e66e93e50e37c2bdf7cdcfd315259baa236b46d89ceb8   (2026-08-13 re-save, the `lab-images` release)
 ```
+
+The 2026-08-13 re-save holds the same four image IDs as the 2026-07-31 build;
+only the tarball bytes differ.
 
 Load with `docker load < bgpsec-lab-images.tar.gz`.
 
 The tarball (attached to the repo's `lab-images` release) is currently the
-only hosted distribution. `GHCR.md` is the runbook for publishing these
+only hosted distribution. `tools/publish_images.sh` creates or refreshes that
+release. `GHCR.md` is the runbook for publishing these
 images to GitHub Container Registry instead.
 
 Not included: `nlnetlabs/krill:v0.14.5`, `nlnetlabs/routinator:v0.15.2`,
