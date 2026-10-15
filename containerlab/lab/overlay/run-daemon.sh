@@ -11,7 +11,7 @@
 # start.
 #
 # Restarting the *container* would do it, but containerlab veths do not
-# survive container recreation (see phase3/PHASE3.md), so that breaks the lab.
+# survive container recreation (see PHASE3.md in the nids-bgpsec-key repo), so that breaks the lab.
 # With this as PID 1 the daemon can be restarted in place:
 #
 #   edit the bind-mounted config on the host, then

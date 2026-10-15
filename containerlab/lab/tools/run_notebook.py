@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Execute a notebook's code cells in order, the way a kernel would.
 
-    python3 tools/run_notebook.py bgpsec-lab.ipynb
+    python3 tools/run_notebook.py nids-bgpsec.ipynb   (from the repo root)
 
 Runs every code cell sequentially in one shared namespace and stops at the
 first exception, reporting which cell failed and its source. This is the
@@ -20,7 +20,7 @@ import sys
 import time
 import traceback
 
-path = sys.argv[1] if len(sys.argv) > 1 else "bgpsec-lab.ipynb"
+path = sys.argv[1] if len(sys.argv) > 1 else "nids-bgpsec.ipynb"
 # Python puts *this script's* directory on sys.path; a Jupyter kernel puts the
 # notebook's. Match the kernel, or `import labkit` fails here and only here.
 sys.path.insert(0, os.path.dirname(os.path.abspath(path)))

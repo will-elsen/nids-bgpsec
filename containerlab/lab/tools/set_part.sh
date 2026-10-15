@@ -7,7 +7,7 @@
 # restarts each routing daemon in place with `pkill`. The containers, their
 # veth links and their addresses all survive — recreating a container would
 # destroy the containerlab links and silently break the lab
-# (see phase3/PHASE3.md).
+# (see PHASE3.md in the nids-bgpsec-key repo).
 #
 # This is a restart, not a reload: BGPsec cannot be switched on or off on a
 # live session, so every part boundary requires the daemon to come up fresh.

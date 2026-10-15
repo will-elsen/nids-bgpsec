@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Codespace bootstrap for the containerlab BGPsec lab (Task 2).
+# Codespace bootstrap for the containerlab BGPsec lab (nids-bgpsec.ipynb).
 #
 # Two jobs: Python packages for the notebooks, and the four bgpsec/*:local
 # Docker images the topology runs. Images come from this repo's `lab-images`
@@ -82,15 +82,15 @@ else
     else
         rm -f "$DIST/$ASSET"
         echo "no usable image bundle — building from source; this takes ~20 minutes"
-        echo "(if $REPO has no '$TAG' release yet, publish one once with"
-        echo " bash containerlab/lab/tools/publish_images.sh — see containerlab/CODESPACES.md)"
+        echo "(if $REPO has no '$TAG' release yet, the instructor publishes one once"
+        echo " with publish_images.sh from the nids-bgpsec-key repo)"
         (cd containerlab/lab && bash build-images.sh)
     fi
 fi
 
 # The RPKI plane's pinned upstream images, pulled now so the first deploy()
-# does not stall on Docker Hub. Krill MUST stay at v0.14.5 — see
-# containerlab/CLAUDE.md for why.
+# does not stall on Docker Hub. Krill MUST stay at v0.14.5: 0.15+ removed the
+# -t/-c/-s krillc flags the testbed's sign_csr.sh uses.
 echo "=== upstream images ==="
 for img in nlnetlabs/krill:v0.14.5 nlnetlabs/routinator:v0.15.2 vimagick/rsyncd; do
     docker pull -q "$img" || { sleep 5; docker pull -q "$img"; } ||
@@ -105,7 +105,7 @@ bash containerlab/lab/tools/build_vault.sh ||
     echo "WARNING: key vault not built — lab.deploy() will retry it"
 
 if docker image inspect bgpsec/quaggasrx:local >/dev/null 2>&1; then
-    echo "=== done — open bgpsec_lab_exercise.ipynb and run it from the top ==="
+    echo "=== done — open nids-bgpsec.ipynb and run it from the top ==="
 else
     echo "=== setup did NOT complete: the bgpsec/*:local images are missing."
     echo "    Fix the network/auth issue, then re-run:  bash .devcontainer/postCreate.sh"

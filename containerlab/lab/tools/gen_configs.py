@@ -221,7 +221,7 @@ def gobgp(part, skis):
         "# peers with AS64666, which is where every attack arrives.",
         "# Unlike the QuaggaSRx routers it does not use srx-server; it validates",
         "# locally via srx-crypto-api against the shared key vault. Its status",
-        "# column reads <origin>,<bgpsec> — see phase3/PHASE3.md.",
+        "# column reads <origin>,<bgpsec> — see PHASE3.md in the nids-bgpsec-key repo.",
         "[global.config]",
         f'  as = "{GOBGP_ASN}"',
         f'  router-id = "{rid}"',

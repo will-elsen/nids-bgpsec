@@ -1,6 +1,19 @@
-[README](README.md) | [Tasks](Tasks.md) | BGPsec ⮕ | [Task 2](Task-bgpsec-lab.md) | [Lab Exercise](bgpsec_lab_exercise.ipynb)
+[README](README.md) | Introduction ⮕ | [Datasets](Datasets.md) | [Containerlab](Containerlab.md) | [Tasks](Tasks.md) | [Task 1](Task-1-concepts.md) | [Task 2](Task-2-bgpsec-lab.md) | [Notebook](nids-bgpsec.ipynb)
 
-# Understanding BGPsec — Proving How a Route Actually Traveled
+# Introduction and Background
+
+### Reading
+
+- [RFC 8374 — BGPsec Design Choices and Summary of Supporting Discussions](https://www.rfc-editor.org/rfc/rfc8374.html) (RFC) — why BGPsec was designed the way it was
+- [RFC 8205 — BGPsec Protocol Specification](https://www.rfc-editor.org/rfc/rfc8205.html) (RFC) — the core BGPsec specification
+- [RFC 8209 — A Profile for BGPsec Router Certificates](https://www.rfc-editor.org/rfc/rfc8209.html) (RFC) — how router certificates are issued under the RPKI
+
+### Prerequisite NIDS Assignments
+
+- [nids-bgp-refresher](https://github.com/CAIDA/nids-bgp-refresher) — how BGP propagates AS_PATHs, and the AS_PATH manipulation (path forgery) attack this assignment defends against
+- [nids-rpki](https://github.com/CAIDA/nids-rpki) — the RPKI, ROAs, and route origin validation (ROV) that BGPsec builds on, and the real-world count of BGPsec router certificates that Q16 asks you to explain
+
+## Proving How a Route Actually Traveled
 
 There are two questions BGP itself can never answer:
 
@@ -18,11 +31,11 @@ BGP prefers — it adds a **cryptographic signature from every AS that propagate
 so a receiving router can verify that the AS_PATH really is the sequence of networks the
 announcement passed through.
 
-> **Key idea:** BGPsec turns the AS_PATH from an *unverified claim* into a **chain of
-> signatures**. Each AS that forwards the route signs a statement naming the prefix, itself,
-> and the neighbor it is sending to. An attacker can still *write down* any path they like,
-> but they cannot produce the signatures of ASes whose private keys they do not hold — so a
-> fabricated path no longer verifies.
+**Key idea:** BGPsec turns the AS_PATH from an *unverified claim* into a **chain of
+signatures**. Each AS that forwards the route signs a statement naming the prefix, itself,
+and the neighbor it is sending to. An attacker can still *write down* any path they like,
+but they cannot produce the signatures of ASes whose private keys they do not hold — so a
+fabricated path no longer verifies.
 
 Like origin validation, BGPsec is built on the **RPKI** trust hierarchy. The same Regional
 Internet Registries (ARIN, RIPE NCC, APNIC, LACNIC, AFRINIC) that certify address space also
@@ -31,7 +44,7 @@ trusted root as proof that it really came from AS64500.
 
 ---
 
-### Router Certificates and Keys
+## Router Certificates and Keys
 
 Before an AS can sign anything, it needs a key pair that is verifiably bound to its ASN. In
 RPKI this is a **router certificate** (also called a BGPsec router certificate): an RPKI
@@ -61,7 +74,7 @@ cannot *create a new one* for a path that never existed, because they don't have
 
 ---
 
-### The BGPsec_PATH Attribute
+## The BGPsec_PATH Attribute
 
 A BGPsec-speaking router does not send the ordinary AS_PATH attribute. It sends a
 **BGPsec_PATH** attribute, which carries the same sequence of ASes *plus* a signature from
@@ -99,7 +112,7 @@ That last two items are what make the chain rigid:
 
 ---
 
-### BGPsec Path Validation
+## BGPsec Path Validation
 
 Path validation is the act of *checking* that chain. A receiving router walks the
 BGPsec_PATH from the origin outward and, for each AS in it, fetches that AS's router
@@ -122,9 +135,9 @@ states:
   └───────────┴─────────────────────────────────────────────────────────────┘
 ```
 
-Note there is no third "unknown" state as there is in origin validation. A route that arrives
-as plain BGP simply **has no BGPsec_PATH to check** — it isn't "Not Valid," it is *unsigned*,
-and is handled by ordinary policy.
+> **Note:** There is no third "unknown" state as there is in origin validation. A route that
+> arrives as plain BGP simply **has no BGPsec_PATH to check** — it isn't "Not Valid," it is
+> *unsigned*, and is handled by ordinary policy.
 
 As with origin validation, BGPsec only *labels* a route; the operator's **routing policy**
 decides what happens:
@@ -136,15 +149,15 @@ decides what happens:
 - **Unsigned** (plain BGP) → accept, but rank below Valid — the same pragmatic compromise
   that keeps the not-yet-deployed majority of the internet reachable.
 
-> **Key idea:** BGPsec doesn't ask *whether a path looks plausible.* It asks whether every AS
-> named in the path actually signed for it. A path nobody signed is a path nobody vouched
-> for — and forging that vouching requires private keys the attacker does not have.
+**Key idea:** BGPsec doesn't ask *whether a path looks plausible.* It asks whether every AS
+named in the path actually signed for it. A path nobody signed is a path nobody vouched
+for — and forging that vouching requires private keys the attacker does not have.
 
 ---
 
-### How BGPsec stops AS_PATH Manipulation
+## How BGPsec Stops AS_PATH Manipulation
 
-Recall the interception attack: **AS64500** legitimately originates `203.0.113.0/24`, and
+Consider the interception attack: **AS64500** legitimately originates `203.0.113.0/24`, and
 attacker **AS66000** announces the same prefix with a *forged* AS_PATH that ends in AS64500 —
 so the route looks like it traces back to the true origin, while traffic actually detours
 through the attacker.
@@ -182,7 +195,7 @@ working, because a real path now carries proof the attacker cannot manufacture.
 
 ---
 
-### How BGPsec relates to origin validation
+## How BGPsec Relates to Origin Validation
 
 BGPsec **includes** origin validation rather than replacing it. A BGPsec-Valid route must
 *also* have an authorized origin — the origin AS's signature proves the announcement really
@@ -202,7 +215,7 @@ that a *hijacker* really did announce the prefix — which is true, and useless.
 
 ---
 
-### What BGPsec does *not* do
+## What BGPsec Does *Not* Do
 
 BGPsec proves that a path was **propagated as claimed**. It does not prove that propagating
 it was **allowed**.
@@ -222,50 +235,17 @@ That last point is the practical crux of deployment.
 
 ---
 
-### Why is deployment hard?
+## Task 1 Background: Why Deployment Is Hard
 
 Everything above says BGPsec *works*: it closes the attack that origin validation cannot, and
 the cryptography behind it is ordinary, well-understood signature verification. And yet
 origin validation is deployed across a large and growing share of the internet, while BGPsec
 is almost nowhere in production.
 
-Before reading on, work out **why** for yourself.
+> **Note:** Answer Q1–Q5 in Task 1.1 before reading the rest of this section. They ask you
+> to predict the obstacles it explains.
 
-#### Task: Predict the obstacles
-
-Think through what actually changes for a network operator who turns BGPsec on tomorrow.
-Consider each of these angles and write down what you think goes wrong:
-
-- **The first adopter.** You enable BGPsec. None of your neighbors have. What protection do
-  you actually gain today?
-- **The unsigned majority.** Most of the internet still sends plain BGP updates that you
-  *must* keep accepting. What does an attacker do with that fact?
-- **The router's workload.** A plain BGP update carries an AS_PATH that is a few bytes to
-  copy. A BGPsec update carries one signature per AS hop. What has to happen on a router
-  holding a full internet routing table — roughly a million prefixes — and what happens
-  during a convergence storm?
-- **The keys.** Signing requires private keys on (or behind) every border router in your
-  network, and certificates that other networks fetch to verify you. What ongoing work does
-  that create, and what breaks when it goes wrong?
-
-Fill in your predictions:
-
-| Angle | What you think the obstacle is |
-| --- | --- |
-| **First adopter** | ______________________________ |
-| **Unsigned majority** | ______________________________ |
-| **Router workload** | ______________________________ |
-| **Key management** | ______________________________ |
-
-Then ask yourself the summarizing question: **origin validation and BGPsec are both signed,
-RPKI-rooted mechanisms — so what is different about BGPsec that made one of them easy to
-deploy and the other one hard?**
-
-...
-
----
-
-#### The reasons
+### The reasons
 
 BGPsec's guarantees are strong, but they come with real costs that have kept adoption far
 behind origin validation.
@@ -302,8 +282,8 @@ signed update per prefix.
 across an operator's entire edge. That is ongoing operational work with no equivalent in
 plain BGP.
 
-**The underlying asymmetry.** Compare this with origin validation, and the answer to the
-summarizing question comes into focus: publishing a ROA is a **unilateral** act. A prefix
+**The underlying asymmetry.** Compare this with origin validation, and the difference between the two
+mechanisms comes into focus: publishing a ROA is a **unilateral** act. A prefix
 holder signs a record about *their own* address space, and any single network that starts
 validating gets immediate benefit — no coordination with neighbors required. BGPsec is
 inherently **collective**: a signature chain is only as good as the ASes that participate in
@@ -313,27 +293,10 @@ closing the more subtle attack.
 
 ---
 
-### Check your understanding
+#### Optional Reading
 
-1. In one sentence each, what does a **router certificate** bind together, and what does the
-   **BGPsec_PATH** attribute carry beyond an ordinary AS_PATH?
-2. Why does each AS sign over the **ASN it is sending the route to**? What attack would be
-   possible if it signed only over the prefix and its own ASN?
-3. An attacker announces a prefix with a forged path ending in the real owner's ASN. Explain
-   why this passes origin validation but fails BGPsec path validation.
-4. A route leak is propagated by ASes that all sign correctly. What does BGPsec report, and
-   why is that answer both correct and unhelpful?
-5. Why does a single non-BGPsec AS in the middle of a path undo the protection for everyone
-   downstream — and why does that make early adoption unattractive?
+- [RFC 8206 — BGPsec Considerations for AS Migration](https://www.rfc-editor.org/rfc/rfc8206.html) (RFC) — how BGPsec interacts with real-world ASN changes
+- [RFC 8208 — BGPsec Algorithms, Key Formats, and Signature Formats](https://www.rfc-editor.org/rfc/rfc8208.html) (RFC) — the cryptography BGPsec uses
+- [NIST Robust Inter-Domain Routing](https://www.nist.gov/programs-projects/robust-inter-domain-routing) (webpage) — NIST's BGP-SRx reference implementation and testbeds, which the lab's routers are built from
 
----
-
-### BGPsec resources
-- [RFC 8205 — BGPsec Protocol Specification](https://www.rfc-editor.org/rfc/rfc8205.html) — the core BGPsec specification.
-- [RFC 8206 — BGPsec Considerations for AS Migration](https://www.rfc-editor.org/rfc/rfc8206.html) — how BGPsec interacts with real-world ASN changes.
-- [RFC 8208 — BGPsec Algorithms, Key Formats, and Signature Formats](https://www.rfc-editor.org/rfc/rfc8208.html) — the cryptography BGPsec uses.
-- [RFC 8209 — A Profile for BGPsec Router Certificates](https://www.rfc-editor.org/rfc/rfc8209.html) — how router certs are issued under RPKI.
-- [RFC 8374 — BGPsec Design Choices and Summary of Supporting Discussions](https://www.rfc-editor.org/rfc/rfc8374.html) — why BGPsec was designed the way it was.
-- [NIST BGP Secure Routing Extension (BRITE / SRx)](https://www.nist.gov/programs-projects/robust-inter-domain-routing) — reference implementations and testbeds for BGPsec.
-
-[README](README.md) | [Tasks](Tasks.md) | BGPsec ⮕ | [Task 2](Task-bgpsec-lab.md) | [Lab Exercise](bgpsec_lab_exercise.ipynb)
+[README](README.md) | Introduction ⮕ | [Datasets](Datasets.md) | [Containerlab](Containerlab.md) | [Tasks](Tasks.md) | [Task 1](Task-1-concepts.md) | [Task 2](Task-2-bgpsec-lab.md) | [Notebook](nids-bgpsec.ipynb)

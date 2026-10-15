@@ -1,10 +1,7 @@
 .ipynb_checkpoints/
 .venv*/
+__pycache__/
 CLAUDE.md
-
-# The containerlab BGPsec lab
-# The lab CLAUDE.md is deliberate documentation, not local notes like the root one.
-!containerlab/CLAUDE.md
-
-# Instructor build of the lab notebook (containerlab/lab/tools/build_exercise.py)
-bgpsec_lab_exercise_instructor.ipynb
+summary.md
+temp/
+z-*

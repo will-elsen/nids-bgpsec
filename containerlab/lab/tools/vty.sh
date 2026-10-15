@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Drive a QuaggaSRx bgpd VTY from the host, without sudo and without vtysh
-# (the image ships neither vtysh nor a unix socket — see PHASE1.md).
+# (the image ships neither vtysh nor a unix socket — see PHASE1.md in the nids-bgpsec-key repo).
 #
 #   vty.sh <node> <command> [<command> ...]
 #
