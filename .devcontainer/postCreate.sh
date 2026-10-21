@@ -15,7 +15,7 @@ set -uo pipefail
 
 # GITHUB_REPOSITORY is set inside a Codespace and tracks renames; the
 # hardcoded fallback covers local dev containers, where it is unset.
-REPO="${GITHUB_REPOSITORY:-will-elsen/bgpsec_module}"
+REPO="${GITHUB_REPOSITORY:-CAIDA/nids-bgpsec}"
 TAG="lab-images"
 ASSET="bgpsec-lab-images.tar.gz"
 DIST="containerlab/lab/dist"
