@@ -43,16 +43,16 @@ nids-bgpsec
 ├- Task-2-bgpsec-lab.md             # Guidance for Task 2
 ├- .devcontainer/                   # Codespace setup - containerlab, router images, Python
 ├- containerlab/                    # The lab - topology, router configs, RPKI plane, labkit
-├- nids-bgpsec.ipynb             ⬅  # Complete / Commit / Push
+├- nids-bgpsec.ipynb            ⬅  # Complete / Commit / Push
 ```
 
 ### Glossary
 
 - **AS (Autonomous System)**: A network under a single administrative control, such as an ISP, cloud provider, or university, identified by a globally unique AS number (ASN).
-- **AS_PATH**: The ordered list of ASes a route has traversed. Each AS prepends its own ASN as it re-advertises the route; the rightmost ASN is the origin.
-- **AS_PATH manipulation (path forgery)**: Advertising a partly or wholly fabricated AS_PATH, enabling interception rather than just blackholing.
 - **ASN (AS number)**: The globally unique number that identifies an AS, such as AS64602; the lab uses numbers from the private-use range.
 - **ASPA (Autonomous System Provider Authorization)**: An RPKI object in which an AS lists its authorized upstream providers, targeting route leaks; unlike BGPsec, it is deployable unilaterally.
+- **AS_PATH**: The ordered list of ASes a route has traversed. Each AS prepends its own ASN as it re-advertises the route; the rightmost ASN is the origin.
+- **AS_PATH manipulation (path forgery)**: Advertising a partly or wholly fabricated AS_PATH, enabling interception rather than just blackholing.
 - **BGP (Border Gateway Protocol)**: The path-vector routing protocol that exchanges reachability information between independently operated networks [ [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271.html) ].
 - **BGPsec**: The BGP extension that protects the entire AS_PATH with a signature from every AS that propagates the route [ [RFC 8205](https://www.rfc-editor.org/rfc/rfc8205.html) ].
 - **BGPsec_PATH**: The attribute that replaces AS_PATH in BGPsec updates: the Secure_Path of ASes plus a Signature_Block holding one nested, forward-signed signature from each.
